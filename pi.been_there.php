@@ -98,17 +98,15 @@ class Been_there {
     $this->expire = ( is_numeric($this->EE->TMPL->fetch_param('expire')) ) ? intval($this->EE->TMPL->fetch_param('expire')) : $this->expire;
     $this->set = ( $this->EE->TMPL->fetch_param('set') == 'no' ) ? false : true;
 
-    if( isset($_COOKIE["exp_been_there"][$entry_id]) )
+
+
+    if( $this->_get($entry_id) )
     {
       $this->return_data = $this->yes;
       return;
     }
-    
-    if($this->set === true )
-    {
-      // Set a cookie with an expiration date 3 months in the future
-      $this->EE->functions->set_cookie("been_there[$entry_id]", true, time() + ($this->expire * 2678400));
-    }
+
+    $this->_save($entry_id);
 
     $this->return_data = $this->no;
 
@@ -136,6 +134,69 @@ class Been_there {
     return ($results->num_rows() > 0) ? $results->row('entry_id') : false;    
   }
   // END _entry_exists
+  
+  function _get($entry_id=false)
+  {
+    if($entry_id)
+    { 
+      
+      $cookie_entries = $db_entries = array();
+      
+      if( isset($_COOKIE["exp_been_there"]) ) {
+        $cookie_entries = array_keys($_COOKIE["exp_been_there"]);
+      }
+      
+      if(isset($this->EE->session->userdata['member_id']) && class_exists('Been_there_ext'))
+      {
+      
+        $query = $this->EE->db->select('viewed_entries')->where('member_id', $this->EE->session->userdata['member_id'])->from('member_data')->get();
+      
+        if($query->num_rows() > 0)
+        {
+          $db_entries = array_filter( explode( '|', $query->row('viewed_entries') ) );        
+        }
+      }
+      
+      $viewed_entries = array_merge($cookie_entries, $db_entries);
+            
+      return in_array($entry_id, $viewed_entries);
+    }
+    
+    return false;
+  }
+  
+  function _save($entry_id=false)
+  {
+
+    if($entry_id && $this->set === true)
+    {
+
+      if(isset($this->EE->session->userdata['member_id']))
+      {
+        
+        if(class_exists('Been_there_ext')) {
+          
+          $this->EE->db->select('viewed_entries')
+                        ->where('member_id', $this->EE->session->userdata['member_id'])
+                        ->from('member_data');
+          $viewed_entries = $this->EE->db->get()->row('viewed_entries');
+        
+          $viewed_entries_arr = explode('|', $viewed_entries);        
+        
+          array_push($viewed_entries_arr, $entry_id);
+        
+          $viewed_entries_new = implode('|', array_filter($viewed_entries_arr));
+        
+          $sql = $this->EE->db->update_string('member_data', array('viewed_entries' => $viewed_entries_new), 'member_id = '.$this->EE->session->userdata['member_id']);
+          $this->EE->db->query($sql);
+        }
+      }
+
+      // Set a cookie with an expiration date 3 months in the future
+      $this->EE->functions->set_cookie("been_there[$entry_id]", true, time() + ($this->expire * 2678400));
+    }
+
+  }
 
 	/**
 	* Plugin Usage
